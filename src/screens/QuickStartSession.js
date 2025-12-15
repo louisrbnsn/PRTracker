@@ -2,9 +2,11 @@ import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView, Alert } from "react-native";
 import { createExercise, getExerciseByName } from "../database/exercises";
 import { createSession, createSeries, updateSessionStatus, updateSessionDuration, deleteSeries } from "../database/sessions";
+import { getTemplateExercises } from "../database/templates";
 
 export default function QuickStartSession({ onClose, route }) {
   const user = route?.params?.user || { id: 1 }; // Fallback user
+  const templateId = route?.params?.templateId; // Optional template ID
   const [seconds, setSeconds] = useState(0);
   const [confirmFinishVisible, setConfirmFinishVisible] = useState(false);
   const [confirmAbandonVisible, setConfirmAbandonVisible] = useState(false);
@@ -33,12 +35,63 @@ export default function QuickStartSession({ onClose, route }) {
   // Create session on mount
   useEffect(() => {
     try {
-      const newSessionId = createSession(user.id);
+      const newSessionId = createSession(user.id, templateId);
       setSessionId(newSessionId);
+      
+      // Load template exercises if templateId is provided
+      if (templateId) {
+        loadTemplateExercises(templateId);
+      }
     } catch (error) {
       console.error("Error creating session:", error);
     }
-  }, []);
+  }, [templateId]); // Added templateId to dependency array
+
+  // Load exercises from template
+  const loadTemplateExercises = (templateId) => {
+    try {
+      const templateExercises = getTemplateExercises(templateId);
+      
+      const loadedExercises = templateExercises.map((te, exerciseIndex) => {
+        // Parse series_pred if it exists
+        let seriesPred = { sets: 3, weight: "", reps: "" };
+        if (te.series_pred) {
+          try {
+            seriesPred = JSON.parse(te.series_pred);
+          } catch (e) {
+            console.error("Error parsing series_pred:", e);
+          }
+        }
+
+        // Create the appropriate number of sets with unique IDs
+        const sets = [];
+        const numSets = parseInt(seriesPred.sets) || 3;
+        for (let i = 0; i < numSets; i++) {
+          sets.push({
+            id: `${Date.now()}-${exerciseIndex}-${i}`, // More unique ID
+            setNumber: i + 1,
+            weight: seriesPred.weight || "",
+            reps: seriesPred.reps || "",
+            type: "normal",
+            completed: false,
+            rpe: null,
+            dbId: null
+          });
+        }
+
+        return {
+          id: te.exercise_id,
+          nom: te.exercise_name,
+          sets: sets,
+          restTimer: te.rest_timer || 90
+        };
+      });
+
+      setExercises(loadedExercises);
+    } catch (error) {
+      console.error("Error loading template exercises:", error);
+    }
+  };
 
   // Timer automatique
   useEffect(() => {
