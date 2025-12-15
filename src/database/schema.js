@@ -36,6 +36,7 @@ export const schemaQueries = [
     user_id INTEGER NOT NULL,
     template_id INTEGER,
     date DATETIME NOT NULL,
+    duration INTEGER,
     status TEXT CHECK(status IN ('en_progress','completed','cancelled')) DEFAULT 'en_progress',
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (template_id) REFERENCES templates(id)
@@ -47,7 +48,7 @@ export const schemaQueries = [
     exercise_id INTEGER NOT NULL,
     poids REAL,
     reps INTEGER,
-    RPE INTEGER,
+    RPE REAL,
     type TEXT CHECK(type IN ('warmup','normal','failure','PR','dropset')),
     note TEXT,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
