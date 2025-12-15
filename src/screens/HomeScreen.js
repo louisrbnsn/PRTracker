@@ -32,10 +32,10 @@ export default function HomeScreen({ route }) {
     }
   };
 
-  // Load templates on mount and when screen gets focus
+  // Load templates on mount and when user ID changes
   useEffect(() => {
     loadTemplates();
-  }, [user]);
+  }, [user?.id]); // Using user?.id instead of user object
 
   // Reload templates when returning from create template screen
   useEffect(() => {

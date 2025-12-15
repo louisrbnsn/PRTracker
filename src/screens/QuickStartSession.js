@@ -45,14 +45,14 @@ export default function QuickStartSession({ onClose, route }) {
     } catch (error) {
       console.error("Error creating session:", error);
     }
-  }, []);
+  }, [templateId]); // Added templateId to dependency array
 
   // Load exercises from template
   const loadTemplateExercises = (templateId) => {
     try {
       const templateExercises = getTemplateExercises(templateId);
       
-      const loadedExercises = templateExercises.map((te) => {
+      const loadedExercises = templateExercises.map((te, exerciseIndex) => {
         // Parse series_pred if it exists
         let seriesPred = { sets: 3, weight: "", reps: "" };
         if (te.series_pred) {
@@ -63,12 +63,12 @@ export default function QuickStartSession({ onClose, route }) {
           }
         }
 
-        // Create the appropriate number of sets
+        // Create the appropriate number of sets with unique IDs
         const sets = [];
         const numSets = parseInt(seriesPred.sets) || 3;
         for (let i = 0; i < numSets; i++) {
           sets.push({
-            id: Date.now() + i,
+            id: `${Date.now()}-${exerciseIndex}-${i}`, // More unique ID
             setNumber: i + 1,
             weight: seriesPred.weight || "",
             reps: seriesPred.reps || "",

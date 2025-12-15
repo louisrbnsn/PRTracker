@@ -27,10 +27,12 @@ export const initDatabase = () => {
         db.execSync(`DROP TABLE IF EXISTS templates`);
         db.execSync(schemaQueries.find(q => q.includes('CREATE TABLE IF NOT EXISTS templates')));
       } else {
-        // Has data - need to add column with default value
-        // Since we can't add a NOT NULL column without default, we'll use a workaround
+        // Has data - add column with default value
+        // Using 1 as default assuming first user exists, but this should be handled carefully
+        // In production, you might want to prompt for migration or assign to a specific user
         db.execSync(`ALTER TABLE templates ADD COLUMN user_id INTEGER DEFAULT 1`);
-        console.log("Added user_id column to existing templates");
+        console.log("Added user_id column to existing templates with default user_id=1");
+        console.warn("Warning: Existing templates assigned to user_id=1. Please verify user associations.");
       }
     }
 
