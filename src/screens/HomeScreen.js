@@ -40,7 +40,10 @@ export default function HomeScreen({ route }) {
         visible={sessionVisible}
         onRequestClose={() => setSessionVisible(false)}
       >
-        <QuickStartSession onClose={() => setSessionVisible(false)} />
+        <QuickStartSession 
+          onClose={() => setSessionVisible(false)} 
+          route={{ params: { user } }}
+        />
       </Modal>
 
       {/* ROUTINES */}
