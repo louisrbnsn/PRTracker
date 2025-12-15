@@ -17,8 +17,10 @@ export const schemaQueries = [
 
   `CREATE TABLE IF NOT EXISTS templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
     nom TEXT NOT NULL,
-    description TEXT
+    description TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id)
   );`,
 
   `CREATE TABLE IF NOT EXISTS template_exercises (
@@ -27,6 +29,7 @@ export const schemaQueries = [
     exercise_id INTEGER NOT NULL,
     ordre INTEGER,
     series_pred TEXT,
+    rest_timer INTEGER,
     FOREIGN KEY (template_id) REFERENCES templates(id) ON DELETE CASCADE,
     FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
   );`,
