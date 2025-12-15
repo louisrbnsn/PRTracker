@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView, Alert } from "react-native";
 import { createExercise, getExerciseByName } from "../database/exercises";
-import { createSession, createSeries, updateSessionStatus } from "../database/sessions";
+import { createSession, createSeries, updateSessionStatus, updateSessionDuration, deleteSeries } from "../database/sessions";
+import { getTemplateExercises } from "../database/templates";
 
 export default function QuickStartSession({ onClose, route }) {
   const user = route?.params?.user || { id: 1 }; // Fallback user
+  const templateId = route?.params?.templateId; // Optional template ID
   const [seconds, setSeconds] = useState(0);
   const [confirmFinishVisible, setConfirmFinishVisible] = useState(false);
   const [confirmAbandonVisible, setConfirmAbandonVisible] = useState(false);
@@ -18,6 +20,10 @@ export default function QuickStartSession({ onClose, route }) {
   const [setTypeModalVisible, setSetTypeModalVisible] = useState(false);
   const [selectedSet, setSelectedSet] = useState(null);
   
+  // RPE modal
+  const [rpeModalVisible, setRpeModalVisible] = useState(false);
+  const [selectedSetForRPE, setSelectedSetForRPE] = useState(null);
+  
   // Session ID
   const [sessionId, setSessionId] = useState(null);
   
@@ -29,12 +35,63 @@ export default function QuickStartSession({ onClose, route }) {
   // Create session on mount
   useEffect(() => {
     try {
-      const newSessionId = createSession(user.id);
+      const newSessionId = createSession(user.id, templateId);
       setSessionId(newSessionId);
+      
+      // Load template exercises if templateId is provided
+      if (templateId) {
+        loadTemplateExercises(templateId);
+      }
     } catch (error) {
       console.error("Error creating session:", error);
     }
-  }, []);
+  }, [templateId]); // Added templateId to dependency array
+
+  // Load exercises from template
+  const loadTemplateExercises = (templateId) => {
+    try {
+      const templateExercises = getTemplateExercises(templateId);
+      
+      const loadedExercises = templateExercises.map((te, exerciseIndex) => {
+        // Parse series_pred if it exists
+        let seriesPred = { sets: 3, weight: "", reps: "" };
+        if (te.series_pred) {
+          try {
+            seriesPred = JSON.parse(te.series_pred);
+          } catch (e) {
+            console.error("Error parsing series_pred:", e);
+          }
+        }
+
+        // Create the appropriate number of sets with unique IDs
+        const sets = [];
+        const numSets = parseInt(seriesPred.sets) || 3;
+        for (let i = 0; i < numSets; i++) {
+          sets.push({
+            id: `${Date.now()}-${exerciseIndex}-${i}`, // More unique ID
+            setNumber: i + 1,
+            weight: seriesPred.weight || "",
+            reps: seriesPred.reps || "",
+            type: "normal",
+            completed: false,
+            rpe: null,
+            dbId: null
+          });
+        }
+
+        return {
+          id: te.exercise_id,
+          nom: te.exercise_name,
+          sets: sets,
+          restTimer: te.rest_timer || 90
+        };
+      });
+
+      setExercises(loadedExercises);
+    } catch (error) {
+      console.error("Error loading template exercises:", error);
+    }
+  };
 
   // Timer automatique
   useEffect(() => {
@@ -90,7 +147,7 @@ export default function QuickStartSession({ onClose, route }) {
         id: exercise.id,
         nom: exerciseName,
         sets: [
-          { id: Date.now(), setNumber: 1, weight: "", reps: "", type: "normal", completed: false }
+          { id: Date.now(), setNumber: 1, weight: "", reps: "", type: "normal", completed: false, rpe: null, dbId: null }
         ],
         restTimer: 90 // Default 90 seconds
       };
@@ -114,7 +171,9 @@ export default function QuickStartSession({ onClose, route }) {
       weight: "",
       reps: "",
       type: "normal",
-      completed: false
+      completed: false,
+      rpe: null,
+      dbId: null
     });
     setExercises(updatedExercises);
   };
@@ -143,6 +202,39 @@ export default function QuickStartSession({ onClose, route }) {
     setSelectedSet(null);
   };
 
+  // Open RPE modal
+  const openRPEModal = (exerciseIndex, setIndex) => {
+    setSelectedSetForRPE({ exerciseIndex, setIndex });
+    setRpeModalVisible(true);
+  };
+
+  // Change RPE value
+  const changeRPE = (rpeValue) => {
+    if (selectedSetForRPE) {
+      const updatedExercises = [...exercises];
+      updatedExercises[selectedSetForRPE.exerciseIndex].sets[selectedSetForRPE.setIndex].rpe = rpeValue;
+      setExercises(updatedExercises);
+    }
+    setRpeModalVisible(false);
+    setSelectedSetForRPE(null);
+  };
+
+  // Get RPE description
+  const getRPEDescription = (rpe) => {
+    const descriptions = {
+      6: "Vous pouviez faire encore 4 reps ou plus",
+      6.5: "Vous pouviez faire 3 ou 4 reps de plus",
+      7: "Vous pouviez faire 3 reps de plus",
+      7.5: "Vous pouviez faire 2 ou 3 reps de plus",
+      8: "Vous pouviez faire 2 reps de plus",
+      8.5: "Vous pouviez faire 1 ou 2 reps de plus",
+      9: "Vous pouviez faire 1 rep de plus",
+      9.5: "Vous auriez pu faire 1 rep de plus avec difficulté",
+      10: "Échec musculaire complet, impossible de faire une rep de plus"
+    };
+    return descriptions[rpe] || "";
+  };
+
   // Complete set
   const completeSet = (exerciseIndex, setIndex) => {
     const updatedExercises = [...exercises];
@@ -159,13 +251,19 @@ export default function QuickStartSession({ onClose, route }) {
     // Save to database if completed
     if (set.completed && sessionId) {
       try {
-        createSeries(
+        const dbId = createSeries(
           sessionId,
           updatedExercises[exerciseIndex].id,
           parseFloat(set.weight) || 0,
           parseInt(set.reps) || 0,
-          set.type
+          set.type,
+          set.rpe,
+          null
         );
+        
+        // Store database ID for potential deletion
+        updatedExercises[exerciseIndex].sets[setIndex].dbId = dbId;
+        setExercises(updatedExercises);
 
         // Start rest timer
         const restTime = updatedExercises[exerciseIndex].restTimer;
@@ -209,11 +307,37 @@ export default function QuickStartSession({ onClose, route }) {
     }
   };
 
+  // Delete set
+  const handleDeleteSet = (exerciseIndex, setIndex) => {
+    const updatedExercises = [...exercises];
+    const set = updatedExercises[exerciseIndex].sets[setIndex];
+    
+    // Delete from database if it was saved
+    if (set.dbId) {
+      try {
+        deleteSeries(set.dbId);
+      } catch (error) {
+        console.error("Error deleting series from database:", error);
+      }
+    }
+    
+    // Remove from local state
+    updatedExercises[exerciseIndex].sets.splice(setIndex, 1);
+    
+    // Renumber remaining sets
+    updatedExercises[exerciseIndex].sets.forEach((s, idx) => {
+      s.setNumber = idx + 1;
+    });
+    
+    setExercises(updatedExercises);
+  };
+
   // Finish session
   const handleFinishSession = () => {
     if (sessionId) {
       try {
         updateSessionStatus(sessionId, 'completed');
+        updateSessionDuration(sessionId, seconds); // Save duration in seconds
       } catch (error) {
         console.error("Error finishing session:", error);
       }
@@ -284,46 +408,81 @@ export default function QuickStartSession({ onClose, route }) {
               <Text style={[styles.setsHeaderText, { flex: 1 }]}>SET</Text>
               <Text style={[styles.setsHeaderText, { flex: 2 }]}>KG</Text>
               <Text style={[styles.setsHeaderText, { flex: 2 }]}>REPS</Text>
+              <Text style={[styles.setsHeaderText, { flex: 1.5 }]}>RPE</Text>
               <View style={{ flex: 1 }} />
             </View>
+            
+            {exercise.sets.length > 0 && (
+              <Text style={styles.hintText}>Appui long pour supprimer une série</Text>
+            )}
 
             {/* Sets */}
             {exercise.sets.map((set, setIndex) => (
-              <View key={set.id} style={styles.setRow}>
+              <View key={set.id} style={styles.setRowWrapper}>
                 <TouchableOpacity
-                  style={[styles.setNumberButton, { backgroundColor: getSetTypeColor(set.type) }]}
-                  onPress={() => openSetTypeModal(exerciseIndex, setIndex)}
+                  style={styles.setRow}
+                  onLongPress={() => {
+                    Alert.alert(
+                      "Supprimer la série",
+                      "Voulez-vous vraiment supprimer cette série ?",
+                      [
+                        { text: "Annuler", style: "cancel" },
+                        { 
+                          text: "Supprimer", 
+                          style: "destructive",
+                          onPress: () => handleDeleteSet(exerciseIndex, setIndex)
+                        }
+                      ]
+                    );
+                  }}
+                  activeOpacity={0.8}
+                  delayLongPress={500}
                 >
-                  <Text style={styles.setNumberText}>
-                    {getSetTypeLabel(set.type, set.setNumber)}
-                  </Text>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.setNumberButton, { backgroundColor: getSetTypeColor(set.type) }]}
+                    onPress={() => openSetTypeModal(exerciseIndex, setIndex)}
+                  >
+                    <Text style={styles.setNumberText}>
+                      {getSetTypeLabel(set.type, set.setNumber)}
+                    </Text>
+                  </TouchableOpacity>
 
-                <TextInput
-                  style={styles.setInput}
-                  value={set.weight}
-                  onChangeText={(value) => updateSetValue(exerciseIndex, setIndex, "weight", value)}
-                  keyboardType="numeric"
-                  placeholder="-"
-                  editable={!set.completed}
-                />
+                  <TextInput
+                    style={styles.setInput}
+                    value={set.weight}
+                    onChangeText={(value) => updateSetValue(exerciseIndex, setIndex, "weight", value)}
+                    keyboardType="numeric"
+                    placeholder="-"
+                    editable={!set.completed}
+                  />
 
-                <TextInput
-                  style={styles.setInput}
-                  value={set.reps}
-                  onChangeText={(value) => updateSetValue(exerciseIndex, setIndex, "reps", value)}
-                  keyboardType="numeric"
-                  placeholder="-"
-                  editable={!set.completed}
-                />
+                  <TextInput
+                    style={styles.setInput}
+                    value={set.reps}
+                    onChangeText={(value) => updateSetValue(exerciseIndex, setIndex, "reps", value)}
+                    keyboardType="numeric"
+                    placeholder="-"
+                    editable={!set.completed}
+                  />
 
-                <TouchableOpacity
-                  style={styles.checkButton}
-                  onPress={() => completeSet(exerciseIndex, setIndex)}
-                >
-                  <Text style={[styles.checkmark, set.completed && styles.checkmarkCompleted]}>
-                    {set.completed ? "✓" : "○"}
-                  </Text>
+                  <TouchableOpacity
+                    style={styles.rpeButton}
+                    onPress={() => openRPEModal(exerciseIndex, setIndex)}
+                    disabled={set.completed}
+                  >
+                    <Text style={[styles.rpeButtonText, set.rpe && styles.rpeButtonTextFilled]}>
+                      {set.rpe ? set.rpe.toFixed(1) : "-"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.checkButton}
+                    onPress={() => completeSet(exerciseIndex, setIndex)}
+                  >
+                    <Text style={[styles.checkmark, set.completed && styles.checkmarkCompleted]}>
+                      {set.completed ? "✓" : "○"}
+                    </Text>
+                  </TouchableOpacity>
                 </TouchableOpacity>
               </View>
             ))}
@@ -438,6 +597,41 @@ export default function QuickStartSession({ onClose, route }) {
             <TouchableOpacity
               style={[styles.confirmButton, { backgroundColor: "#ccc", marginTop: 15 }]}
               onPress={() => setSetTypeModalVisible(false)}
+            >
+              <Text style={styles.confirmButtonText}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal RPE */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={rpeModalVisible}
+        onRequestClose={() => setRpeModalVisible(false)}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={[styles.confirmContainer, { maxHeight: '80%' }]}>
+            <Text style={styles.confirmText}>Sélectionner RPE</Text>
+            <Text style={styles.rpeSubText}>Rate of Perceived Exertion</Text>
+            
+            <ScrollView style={styles.rpeScrollView} showsVerticalScrollIndicator={true}>
+              {[6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10].map((rpeValue) => (
+                <TouchableOpacity
+                  key={rpeValue}
+                  style={styles.rpeOption}
+                  onPress={() => changeRPE(rpeValue)}
+                >
+                  <Text style={styles.rpeValue}>RPE {rpeValue}</Text>
+                  <Text style={styles.rpeDescription}>{getRPEDescription(rpeValue)}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.confirmButton, { backgroundColor: "#ccc", marginTop: 15 }]}
+              onPress={() => setRpeModalVisible(false)}
             >
               <Text style={styles.confirmButtonText}>Annuler</Text>
             </TouchableOpacity>
@@ -619,10 +813,19 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
   },
+  hintText: {
+    fontSize: 10,
+    color: "#999",
+    fontStyle: "italic",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  setRowWrapper: {
+    marginBottom: 8,
+  },
   setRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
   },
   setNumberButton: {
     flex: 1,
@@ -757,5 +960,53 @@ const styles = StyleSheet.create({
     color: "white",
     fontWeight: "600",
     fontSize: 16,
+  },
+  setRowWrapper: {
+    marginBottom: 8,
+  },
+  rpeButton: {
+    flex: 1.5,
+    backgroundColor: "#F0F0F0",
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginRight: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rpeButtonText: {
+    fontSize: 16,
+    color: "#999",
+    fontWeight: "600",
+  },
+  rpeButtonTextFilled: {
+    color: "#3B82F6",
+  },
+  rpeSubText: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  rpeScrollView: {
+    width: "100%",
+    maxHeight: 400,
+  },
+  rpeOption: {
+    paddingVertical: 15,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0E0",
+    width: "100%",
+  },
+  rpeValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#3B82F6",
+    marginBottom: 4,
+  },
+  rpeDescription: {
+    fontSize: 13,
+    color: "#666",
   },
 });

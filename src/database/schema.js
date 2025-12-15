@@ -17,8 +17,10 @@ export const schemaQueries = [
 
   `CREATE TABLE IF NOT EXISTS templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
     nom TEXT NOT NULL,
-    description TEXT
+    description TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id)
   );`,
 
   `CREATE TABLE IF NOT EXISTS template_exercises (
@@ -27,6 +29,7 @@ export const schemaQueries = [
     exercise_id INTEGER NOT NULL,
     ordre INTEGER,
     series_pred TEXT,
+    rest_timer INTEGER,
     FOREIGN KEY (template_id) REFERENCES templates(id) ON DELETE CASCADE,
     FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE
   );`,
@@ -36,6 +39,7 @@ export const schemaQueries = [
     user_id INTEGER NOT NULL,
     template_id INTEGER,
     date DATETIME NOT NULL,
+    duration INTEGER,
     status TEXT CHECK(status IN ('en_progress','completed','cancelled')) DEFAULT 'en_progress',
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (template_id) REFERENCES templates(id)
@@ -47,7 +51,7 @@ export const schemaQueries = [
     exercise_id INTEGER NOT NULL,
     poids REAL,
     reps INTEGER,
-    RPE INTEGER,
+    RPE REAL,
     type TEXT CHECK(type IN ('warmup','normal','failure','PR','dropset')),
     note TEXT,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,

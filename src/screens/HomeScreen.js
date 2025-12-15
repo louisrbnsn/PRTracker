@@ -1,10 +1,54 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Modal } from "react-native";
 import QuickStartSession from "./QuickStartSession"; // importer la séance
+import CreateTemplateScreen from "./CreateTemplateScreen";
+import { getTemplatesByUser, getTemplateExercises } from "../database/templates";
 
 export default function HomeScreen({ route }) {
   const user = route.params?.user;
   const [sessionVisible, setSessionVisible] = useState(false); // pour le pop-up
+  const [createTemplateVisible, setCreateTemplateVisible] = useState(false); // pour créer template
+  const [templates, setTemplates] = useState([]); // routines from DB
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null); // for starting session with template
+
+  // Load templates from database
+  const loadTemplates = () => {
+    if (user?.id) {
+      try {
+        const userTemplates = getTemplatesByUser(user.id);
+        // Enrich templates with exercise info
+        const templatesWithExercises = userTemplates.map(template => {
+          const exercises = getTemplateExercises(template.id);
+          return {
+            ...template,
+            exerciseCount: exercises.length,
+            exerciseNames: exercises.slice(0, 3).map(e => e.exercise_name)
+          };
+        });
+        setTemplates(templatesWithExercises);
+      } catch (error) {
+        console.error("Error loading templates:", error);
+      }
+    }
+  };
+
+  // Load templates on mount and when user ID changes
+  useEffect(() => {
+    loadTemplates();
+  }, [user?.id]); // Using user?.id instead of user object
+
+  // Reload templates when returning from create template screen
+  useEffect(() => {
+    if (!createTemplateVisible && !sessionVisible) {
+      loadTemplates();
+    }
+  }, [createTemplateVisible, sessionVisible]);
+
+  // Start session with template
+  const handleStartTemplate = (templateId) => {
+    setSelectedTemplateId(templateId);
+    setSessionVisible(true);
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 50 }}>
@@ -33,15 +77,34 @@ export default function HomeScreen({ route }) {
         </TouchableOpacity>
       </View>
 
-      {/* Modal pleine page */}
+      {/* Modal pleine page pour session */}
       <Modal
         animationType="slide"
         transparent={false}
         visible={sessionVisible}
-        onRequestClose={() => setSessionVisible(false)}
+        onRequestClose={() => {
+          setSessionVisible(false);
+          setSelectedTemplateId(null);
+        }}
       >
         <QuickStartSession 
-          onClose={() => setSessionVisible(false)} 
+          onClose={() => {
+            setSessionVisible(false);
+            setSelectedTemplateId(null);
+          }} 
+          route={{ params: { user, templateId: selectedTemplateId } }}
+        />
+      </Modal>
+
+      {/* Modal pour créer une routine */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={createTemplateVisible}
+        onRequestClose={() => setCreateTemplateVisible(false)}
+      >
+        <CreateTemplateScreen
+          onClose={() => setCreateTemplateVisible(false)}
           route={{ params: { user } }}
         />
       </Modal>
@@ -49,26 +112,36 @@ export default function HomeScreen({ route }) {
       {/* ROUTINES */}
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Vos routines</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => setCreateTemplateVisible(true)}>
           <Text style={styles.addButton}>+ Ajouter</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.routineGrid}>
-        <View style={styles.routineCard}>
-          <Text style={styles.routineName}>Full Body</Text>
-          <Text style={styles.routineSub}>Squats, Rowing, Bench Press</Text>
-        </View>
-
-        <View style={styles.routineCard}>
-          <Text style={styles.routineName}>Push Day</Text>
-          <Text style={styles.routineSub}>Développé militaire, Dips</Text>
-        </View>
-
-        <View style={styles.routineCard}>
-          <Text style={styles.routineName}>Leg Day</Text>
-          <Text style={styles.routineSub}>Squats, Presse, Fentes</Text>
-        </View>
+        {templates.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>Aucune routine pour le moment</Text>
+            <Text style={styles.emptyStateSubText}>Appuyez sur "+ Ajouter" pour créer une routine</Text>
+          </View>
+        ) : (
+          templates.map((template) => (
+            <TouchableOpacity
+              key={template.id}
+              style={styles.routineCard}
+              onPress={() => handleStartTemplate(template.id)}
+            >
+              <Text style={styles.routineName}>{template.nom}</Text>
+              <Text style={styles.routineSub}>
+                {template.exerciseCount} exercice{template.exerciseCount !== 1 ? 's' : ''}
+              </Text>
+              {template.exerciseNames && template.exerciseNames.length > 0 && (
+                <Text style={styles.routineExercises}>
+                  {template.exerciseNames.join(', ')}
+                </Text>
+              )}
+            </TouchableOpacity>
+          ))
+        )}
       </View>
     </ScrollView>
   );
@@ -175,5 +248,26 @@ const styles = StyleSheet.create({
   routineSub: {
     fontSize: 12,
     color: "#666",
+    marginBottom: 4,
+  },
+  routineExercises: {
+    fontSize: 11,
+    color: "#999",
+    fontStyle: "italic",
+  },
+  emptyState: {
+    width: "100%",
+    alignItems: "center",
+    paddingVertical: 30,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: "#999",
+    fontWeight: "600",
+    marginBottom: 5,
+  },
+  emptyStateSubText: {
+    fontSize: 13,
+    color: "#BBB",
   },
 });
