@@ -9,6 +9,7 @@ import { initDatabase } from "./src/database/init";
 import LoginScreen from "./src/screens/LoginScreen";
 import SignupScreen from "./src/screens/SignupScreen";
 import HomeScreen from "./src/screens/HomeScreen";
+import HistoryScreen from "./src/screens/HistoryScreen";
 import AccountScreen from "./src/screens/AccountScreen";
 
 const Stack = createNativeStackNavigator();
@@ -33,6 +34,18 @@ function MainTabs({ route }) {
           tabBarLabel: "Accueil",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tab.Screen
+        name="History"
+        component={HistoryScreen}
+        initialParams={{ user }}
+        options={{
+          tabBarLabel: "Historique",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="time-outline" size={size} color={color} />
           ),
         }}
       />
