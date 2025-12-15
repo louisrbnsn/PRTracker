@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { getAllCompletedSessions, getSessionDetails } from "../database/sessions";
 
 export default function HistoryScreen({ route }) {
@@ -8,9 +9,12 @@ export default function HistoryScreen({ route }) {
   const [selectedSession, setSelectedSession] = useState(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
 
-  useEffect(() => {
-    loadSessions();
-  }, []);
+  // Reload sessions when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      loadSessions();
+    }, [user])
+  );
 
   const loadSessions = () => {
     try {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView, Alert, Animated, PanResponder } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView, Alert } from "react-native";
 import { createExercise, getExerciseByName } from "../database/exercises";
 import { createSession, createSeries, updateSessionStatus, updateSessionDuration, deleteSeries } from "../database/sessions";
 
@@ -358,80 +358,79 @@ export default function QuickStartSession({ onClose, route }) {
               <Text style={[styles.setsHeaderText, { flex: 1.5 }]}>RPE</Text>
               <View style={{ flex: 1 }} />
             </View>
+            
+            {exercise.sets.length > 0 && (
+              <Text style={styles.hintText}>Appui long pour supprimer une série</Text>
+            )}
 
             {/* Sets */}
             {exercise.sets.map((set, setIndex) => (
-              <View key={set.id}>
-                <View style={styles.setRowContainer}>
-                  <View style={styles.setRow}>
-                    <TouchableOpacity
-                      style={[styles.setNumberButton, { backgroundColor: getSetTypeColor(set.type) }]}
-                      onPress={() => openSetTypeModal(exerciseIndex, setIndex)}
-                    >
-                      <Text style={styles.setNumberText}>
-                        {getSetTypeLabel(set.type, set.setNumber)}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TextInput
-                      style={styles.setInput}
-                      value={set.weight}
-                      onChangeText={(value) => updateSetValue(exerciseIndex, setIndex, "weight", value)}
-                      keyboardType="numeric"
-                      placeholder="-"
-                      editable={!set.completed}
-                    />
-
-                    <TextInput
-                      style={styles.setInput}
-                      value={set.reps}
-                      onChangeText={(value) => updateSetValue(exerciseIndex, setIndex, "reps", value)}
-                      keyboardType="numeric"
-                      placeholder="-"
-                      editable={!set.completed}
-                    />
-
-                    <TouchableOpacity
-                      style={styles.rpeButton}
-                      onPress={() => openRPEModal(exerciseIndex, setIndex)}
-                      disabled={set.completed}
-                    >
-                      <Text style={[styles.rpeButtonText, set.rpe && styles.rpeButtonTextFilled]}>
-                        {set.rpe ? set.rpe.toFixed(1) : "-"}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.checkButton}
-                      onPress={() => completeSet(exerciseIndex, setIndex)}
-                    >
-                      <Text style={[styles.checkmark, set.completed && styles.checkmarkCompleted]}>
-                        {set.completed ? "✓" : "○"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                  
-                  {/* Delete button (right side) */}
+              <View key={set.id} style={styles.setRowWrapper}>
+                <TouchableOpacity
+                  style={styles.setRow}
+                  onLongPress={() => {
+                    Alert.alert(
+                      "Supprimer la série",
+                      "Voulez-vous vraiment supprimer cette série ?",
+                      [
+                        { text: "Annuler", style: "cancel" },
+                        { 
+                          text: "Supprimer", 
+                          style: "destructive",
+                          onPress: () => handleDeleteSet(exerciseIndex, setIndex)
+                        }
+                      ]
+                    );
+                  }}
+                  activeOpacity={0.8}
+                  delayLongPress={500}
+                >
                   <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => {
-                      Alert.alert(
-                        "Supprimer la série",
-                        "Voulez-vous vraiment supprimer cette série ?",
-                        [
-                          { text: "Annuler", style: "cancel" },
-                          { 
-                            text: "Supprimer", 
-                            style: "destructive",
-                            onPress: () => handleDeleteSet(exerciseIndex, setIndex)
-                          }
-                        ]
-                      );
-                    }}
+                    style={[styles.setNumberButton, { backgroundColor: getSetTypeColor(set.type) }]}
+                    onPress={() => openSetTypeModal(exerciseIndex, setIndex)}
                   >
-                    <Text style={styles.deleteButtonText}>🗑️</Text>
+                    <Text style={styles.setNumberText}>
+                      {getSetTypeLabel(set.type, set.setNumber)}
+                    </Text>
                   </TouchableOpacity>
-                </View>
+
+                  <TextInput
+                    style={styles.setInput}
+                    value={set.weight}
+                    onChangeText={(value) => updateSetValue(exerciseIndex, setIndex, "weight", value)}
+                    keyboardType="numeric"
+                    placeholder="-"
+                    editable={!set.completed}
+                  />
+
+                  <TextInput
+                    style={styles.setInput}
+                    value={set.reps}
+                    onChangeText={(value) => updateSetValue(exerciseIndex, setIndex, "reps", value)}
+                    keyboardType="numeric"
+                    placeholder="-"
+                    editable={!set.completed}
+                  />
+
+                  <TouchableOpacity
+                    style={styles.rpeButton}
+                    onPress={() => openRPEModal(exerciseIndex, setIndex)}
+                    disabled={set.completed}
+                  >
+                    <Text style={[styles.rpeButtonText, set.rpe && styles.rpeButtonTextFilled]}>
+                      {set.rpe ? set.rpe.toFixed(1) : "-"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.checkButton}
+                    onPress={() => completeSet(exerciseIndex, setIndex)}
+                  >
+                    <Text style={[styles.checkmark, set.completed && styles.checkmarkCompleted]}>
+                      {set.completed ? "✓" : "○"}
+                    </Text>
+                  </TouchableOpacity>
+                </TouchableOpacity>
               </View>
             ))}
 
@@ -761,10 +760,19 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
   },
+  hintText: {
+    fontSize: 10,
+    color: "#999",
+    fontStyle: "italic",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  setRowWrapper: {
+    marginBottom: 8,
+  },
   setRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
   },
   setNumberButton: {
     flex: 1,
@@ -900,9 +908,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 16,
   },
-  setRowContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+  setRowWrapper: {
     marginBottom: 8,
   },
   rpeButton: {
@@ -922,19 +928,6 @@ const styles = StyleSheet.create({
   },
   rpeButtonTextFilled: {
     color: "#3B82F6",
-  },
-  deleteButton: {
-    position: "absolute",
-    right: -10,
-    backgroundColor: "#FF4444",
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  deleteButtonText: {
-    fontSize: 20,
   },
   rpeSubText: {
     fontSize: 12,
